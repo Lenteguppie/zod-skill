@@ -11,6 +11,7 @@ from mycroft.util import time as m_time
 import websocket
 import _thread
 import time
+import json
 
 from datetime import datetime, timedelta
 
@@ -18,18 +19,32 @@ print('Setting up client to connect to a local mycroft instance')
 client = MessageBusClient()
 client.run_in_thread()
 
+device_id = "ZOD_69XXX420"
+
 # Define WebSocket callback functions
 def ws_message(ws, message):
     LOG.info("WebSocket thread: %s" % message)
     # data = {'message': str(message)}
-    msg = {'event':''}
-    client.emit(Message('speak', data={'utterance': f'The server said: {message}'}))
+    message = json.loads(message)
+    if 'event' in message:
+        event = message.get("event")
+        LOG.info(f"Event: {event}")
+        if event == "direct_message":
+            msg = message.get("message")
+            LOG.info(f"msg: {msg}")
+            sender_id = message.get("sender")
+            receiver_id = message.get("receiver")
+            LOG.info(f"receiver: {receiver_id}")
+            if receiver_id == device_id:
+                LOG.info("same device :D")
+                client.emit(Message('speak', data={'utterance': f'{sender_id} said: {msg}'}))
 
 def ws_open(ws):
-    ws.send('{"event":"register", "device_id":"ZOD_00XPD01"}')
+    ws.send('{"event":"authenticate", "device_id":"'+ device_id +'"}')
 
 def on_close(ws):
     LOG.info("### socket closed ###")
+    
 
 class Zod(MycroftSkill):
     def __init__(self):
