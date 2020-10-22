@@ -8,6 +8,7 @@ from mycroft.util.parse import extract_datetime
 from mycroft.util import play_wav
 from mycroft.util import time as m_time
 
+
 import websocket
 import _thread
 import time
@@ -18,6 +19,8 @@ from datetime import datetime, timedelta
 print('Setting up client to connect to a local mycroft instance')
 client = MessageBusClient()
 client.run_in_thread()
+
+stopSig = False
 
 device_id = "ZOD_69XXX420"
 
@@ -38,6 +41,19 @@ def ws_message(ws, message):
             if receiver_id == device_id:
                 LOG.info("same device :D")
                 client.emit(Message('speak', data={'utterance': f'{sender_id} said: {msg}'}))
+        
+        if event == "close_con":
+            stopSig = True
+            try:
+                ws.close()
+            except Exception as e:
+                pass
+        
+        #calendar listener
+        if event == "calendar_push":
+            if message.get("sync") == True:
+
+                client.emit(Message(msg_type="recognizer_loop:utterance", data={'utterances': ['refresh the reminders']}))
 
 def ws_open(ws):
     ws.send('{"event":"authenticate", "device_id":"'+ device_id +'"}')
@@ -49,7 +65,7 @@ def on_close(ws):
 class Zod(MycroftSkill):
     def __init__(self):
         MycroftSkill.__init__(self)
-
+    
     @intent_file_handler('zod.intent')
     def handle_zod(self, message):
         self.speak_dialog('zod')
