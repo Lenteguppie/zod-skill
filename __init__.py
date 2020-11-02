@@ -35,16 +35,26 @@ test_msg = {"time": "123412", "date": "21424","from": 'Obiwan','body': "I have t
 class Zod(MycroftSkill):
     def __init__(self):
         MycroftSkill.__init__(self)
+        self.authenticate = False
+        self.message_log = LocalSave(sms_entries)
+        self.device_log = LocalSave(device_cd)
+        self.ws_url = "ws://192.168.178.32:8123/"
+
+        self.device_id = self.check_device_id()
+
         self.ls = LocalSave(sms_entries)
     
+    def initialize(self):
+        self.schedule_event(self.initialize_websocket, datetime.now(),
+                            name='socket_connection')
+
+    def initialize_websocket(self):
+        # Start a new thread for the WebSocket interface
+        _thread.start_new_thread(self.__create_ws, ())
+        
     @intent_file_handler('zod.intent')
     def handle_zod(self, message):
         self.speak_dialog('zod')
-
-    
-    def initialize(self):
-        self.schedule_event(WebSocketManager(), datetime.now(),
-                            name='socket_connection')
 
     @intent_file_handler('zod.speak_message')
     def read_message(self):
@@ -65,27 +75,6 @@ class Zod(MycroftSkill):
         else:
             client.emit(Message('speak', data={'utterance': f'There are {temp_entries}'}))
     
-    # def _speak_dialog(self, dialog, data=None, response =False):
-    #     self.speak_dialog(dialog, data, response)
-
-def create_skill():
-    return Zod()
-
-class WebSocketManager:
-    def __init__(self):
-
-        self.authenticate = False
-        self.message_log = LocalSave(sms_entries)
-        self.device_log = LocalSave(device_cd)
-        self.ws_url = "ws://192.168.178.32:8123/"
-
-        self.device_id = self.check_device_id()
-        self.initialize_websocket()
-
-    def initialize_websocket(self):
-        # Start a new thread for the WebSocket interface
-        _thread.start_new_thread(self.__create_ws, ())
-
     def check_device_id(self):
         try:
             temp_arr = self.device_log.get_contents()
@@ -132,11 +121,7 @@ class WebSocketManager:
     @staticmethod
     def on_close(ws):
         LOG.info("### socket closed ###")
-        _thread.exit()
 
-    # def ws_thread(self, *args):
-    #     ws = websocket.WebSocketApp("ws://192.168.178.32:8123/", on_open = WebSocketManager.ws_open, on_message = WebSocketManager.ws_message, on_close= WebSocketManager.on_close)
-    #     ws.run_forever()
     @staticmethod
     def on_error(ws):
         pass
@@ -146,10 +131,10 @@ class WebSocketManager:
             try:
                 websocket.enableTrace(False)
                 self.__WSCONNECTION = websocket.WebSocketApp(self.ws_url,
-                                            on_open= WebSocketManager.ws_open,
-                                            on_message = WebSocketManager.ws_message,
-                                            on_error = WebSocketManager.on_error,
-                                            on_close = WebSocketManager.on_close
+                                            on_open= Zod.ws_open,
+                                            on_message = Zod.ws_message,
+                                            on_error = Zod.on_error,
+                                            on_close = Zod.on_close
                                             )
                 self.__WSCONNECTION.run_forever(skip_utf8_validation=True,ping_interval=10,ping_timeout=8)
             except Exception as e:
@@ -157,3 +142,9 @@ class WebSocketManager:
                 LOG.debug("Websocket connection Error  : {0}".format(e))                    
             LOG.debug("Reconnecting websocket  after 5 sec")
             time.sleep(5)
+
+    # def _speak_dialog(self, dialog, data=None, response =False):
+    #     self.speak_dialog(dialog, data, response)
+
+def create_skill():
+    return Zod()
