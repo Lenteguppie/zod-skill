@@ -111,4 +111,3 @@ class Zod(MycroftSkill):
     
 def create_skill():
     return Zod()
-
