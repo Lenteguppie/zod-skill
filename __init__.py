@@ -13,6 +13,9 @@ import websocket
 import _thread
 import time
 import json as js
+import gc
+
+from .local_save import LocalSave
 
 from datetime import datetime, timedelta
 
@@ -38,10 +41,11 @@ class Zod(MycroftSkill):
     def handle_zod(self, message):
         self.speak_dialog('zod')
 
-    def initialize(self):
-        self.schedule_event(self.initialize_websocket, datetime.now(),
-                            name='socket_connection')
     
+    def initialize(self):
+        self.schedule_event(WebSocketManager(), datetime.now(),
+                            name='socket_connection')
+
     @intent_file_handler('zod.speak_message')
     def read_message(self):
         temp_msg = self.ls.get_contents()
@@ -60,18 +64,9 @@ class Zod(MycroftSkill):
             client.emit(Message('speak', data={'utterance': f'there are no new entries'}))
         else:
             client.emit(Message('speak', data={'utterance': f'There are {temp_entries}'}))
-
-    def initialize_websocket(self):
-        # Start a new thread for the WebSocket interface
-        _thread.start_new_thread(self.ws_thread, ())
     
     # def _speak_dialog(self, dialog, data=None, response =False):
     #     self.speak_dialog(dialog, data, response)
-
-    def ws_thread(self, *args):
-        ws = websocket.WebSocketApp("ws://192.168.178.32:8123/", on_open = WebSocketManager.ws_open, on_message = WebSocketManager.ws_message, on_close= WebSocketManager.on_close)
-        ws.run_forever()
-
 
 def create_skill():
     return Zod()
@@ -82,8 +77,14 @@ class WebSocketManager:
         self.authenticate = False
         self.message_log = LocalSave(sms_entries)
         self.device_log = LocalSave(device_cd)
-        
+        self.ws_url = "ws://192.168.178.32:8123/"
+
         self.device_id = self.check_device_id()
+        self.initialize_websocket()
+
+    def initialize_websocket(self):
+        # Start a new thread for the WebSocket interface
+        _thread.start_new_thread(self.__create_ws, ())
 
     def check_device_id(self):
         try:
@@ -131,88 +132,28 @@ class WebSocketManager:
     @staticmethod
     def on_close(ws):
         LOG.info("### socket closed ###")
+        _thread.exit()
 
-class LocalSave:
-    def __init__(self, name = "temp"):
-        self.file_name = (name+".txt")
-        self.file = open(self.file_name,"a")
-        self.content = {}
-        self.entry_name = "Entries"
-        self.content[self.entry_name] = []
-        self.amount_of_entries = 0
+    # def ws_thread(self, *args):
+    #     ws = websocket.WebSocketApp("ws://192.168.178.32:8123/", on_open = WebSocketManager.ws_open, on_message = WebSocketManager.ws_message, on_close= WebSocketManager.on_close)
+    #     ws.run_forever()
+    @staticmethod
+    def on_error(ws):
+        pass
 
-        if os.path.isfile(self.file_name): # Check if sms log is already created
-            self.check_entries()
-            self.set_content()
-
-    def check_entries(self): # To check the amount of entries in the sms log
-        try:
-            with open(self.file_name) as json_file:
-                data = js.load(json_file)
-                try: 
-                    self.amount_of_entries = len(data[self.entry_name])
-                    return self.amount_of_entries
-                except:
-                    print("[Info] Currently no entries")
-                    return 0
-        except:
-            print("[Warning] File doesn't exist yet")
-            return 0
-
-    def set_content(self):  # Add content from the local file to local variable
-        try:
-            with open(self.file_name) as json_file:
-                data = js.load(json_file)
-                for i in range(self.amount_of_entries):
-                    self.content[self.entry_name].append(data[self.entry_name][i])
-        except:
-            print("[Warning] contents not found")
-                
-    def update_file(self, content:dict): # Updates the localfile by overwritting the current file content , add dictonary to the param to store on a local file
-        
-        if content == {}:
-            return 0
-
-        temp_dict = {}
-        temp_array = []
-
-        for x, y in content.items():
-            temp_array.append((x,y))
-        
-        temp_dict = dict(temp_array)    
-
-        self.content[self.entry_name].append(temp_dict)
-
-        with open(self.file_name,'w+') as outfile: # Overwrite content from the sms log
-            js.dump(self.content,outfile, indent= 2) 
-
-    def get_contents(self): # get content from local file and returns it in a list.
-        temp_list = []
-        try:
-            with open(self.file_name) as json_file:
-                data = js.load(json_file)
-                for i in range(self.amount_of_entries):
-                    temp_list.append(data[self.entry_name][i])
-        except:
-            print("[Warning] Empty")
-            return 0
-        return temp_list # Returns a list of logs
-
-    def keep_sms(self, store= False): # Option to keep the sms, give a boolean to save if you want to.
-        temp_list = self.get_contents()
-        
-        try:
-            return_list = {}
-            if store:
-                return_list = temp_list[0]
-
-            temp_list.pop(0)
-            temp_content = {}
-            temp_content[self.entry_name] = temp_list
-            with open(self.file_name,'w+') as outfile: # Overwrite content from the sms log
-                js.dump(temp_content,outfile, indent= 2) 
-        except:
-            print("[Warning] no entries")
-            return 0
-
-        return return_list
+    def __create_ws(self):
+        while True:
+            try:
+                websocket.enableTrace(False)
+                self.__WSCONNECTION = websocket.WebSocketApp(self.ws_url,
+                                            on_open= WebSocketManager.ws_open,
+                                            on_message = WebSocketManager.ws_message,
+                                            on_error = WebSocketManager.on_error,
+                                            on_close = WebSocketManager.on_close
+                                            )
+                self.__WSCONNECTION.run_forever(skip_utf8_validation=True,ping_interval=10,ping_timeout=8)
+            except Exception as e:
+                gc.collect()
+                LOG.debug("Websocket connection Error  : {0}".format(e))                    
+            LOG.debug("Reconnecting websocket  after 5 sec")
+            time.sleep(5)
