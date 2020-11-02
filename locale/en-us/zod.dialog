@@ -1,1 +1,2 @@
 The server said {{message}}
+The server said something to us with the message {{message}}
