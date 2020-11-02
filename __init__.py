@@ -101,7 +101,6 @@ class Zod(MycroftSkill):
                                           on_error = on_error,
                                           on_close = on_close
                                           )
-                self.__WSCONNECTION.on_open = self.__on_open
                 self.__WSCONNECTION.run_forever(skip_utf8_validation=True,ping_interval=10,ping_timeout=8)
             except Exception as e:
                 gc.collect()
