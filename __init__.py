@@ -10,8 +10,6 @@ from mycroft.util import time as m_time
 
 import os
 import websocket
-import _thread
-import time
 import json as js
 import gc
 import threading
@@ -19,8 +17,14 @@ import requests
 import RPi.GPIO as GPIO
 
 from .local_save import LocalSave
+import _thread, time
+import json
+
+import gc
 
 from datetime import datetime, timedelta
+
+ws_connected = False
 
 print('Setting up client to connect to a local mycroft instance')
 client = MessageBusClient()
@@ -37,6 +41,8 @@ device_id = "ZOD69XXX420"
 virtual_number = "+3197010252540"
 
 register = {"register": False, "device_id": device_id}
+device_id = "ZOD_69XXX420"
+ws_url = "ws://yeplab.com:6456/"
 
 def ws_message(ws, message):
     temp_sms = LocalSave(sms_entries)
@@ -180,7 +186,7 @@ class Zod(MycroftSkill):
             except Exception as e:
                 gc.collect()
                 LOG.debug("Websocket connection Error  : {0}".format(e))                    
-            # LOG.debug("Reconnecting websocket  after 5 sec")
+            LOG.debug("Reconnecting websocket  after 5 sec")
             time.sleep(5)
 
 
